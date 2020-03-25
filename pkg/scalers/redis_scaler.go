@@ -22,6 +22,8 @@ const (
 	defaultRedisPassword    = ""
 	defaultDbIdx            = 0
 	defaultEnableTLS        = false
+	defaultHost             = ""
+	defaultPort             = ""
 )
 
 type redisScaler struct {
@@ -33,6 +35,8 @@ type redisMetadata struct {
 	listName         string
 	address          string
 	password         string
+	host             string
+	port             string
 	databaseIndex    int
 	enableTLS        bool
 }
@@ -70,14 +74,37 @@ func parseRedisMetadata(metadata, resolvedEnv, authParams map[string]string) (*r
 	}
 
 	address := defaultRedisAddress
+	host := defaultHost
+	port := defaultPort
 	if val, ok := metadata["address"]; ok && val != "" {
 		address = val
+	} else {
+		if val, ok := metadata["host"]; ok && val != "" {
+			host = val
+		} else {
+			return nil, fmt.Errorf("no address or host given. address should be in the format of host:port or you should set the host/port values")
+		}
+		if val, ok := metadata["port"]; ok && val != "" {
+			port = val
+		} else {
+			return nil, fmt.Errorf("no address or port given. address should be in the format of host:port or you should set the host/port values")
+		}
 	}
 
 	if val, ok := resolvedEnv[address]; ok {
 		meta.address = val
 	} else {
-		return nil, fmt.Errorf("no address given. Address should be in the format of host:port")
+		if val, ok := resolvedEnv[host]; ok {
+			meta.host = val
+		} else {
+			return nil, fmt.Errorf("no address given or host given. Address should be in the format of host:port or you should provide both host and port")
+		}
+
+		if val, ok := resolvedEnv[port]; ok {
+			meta.port = val
+		} else {
+			return nil, fmt.Errorf("no address or port given. Address should be in the format of host:port or you should provide both host and port")
+		}
 	}
 
 	meta.password = defaultRedisPassword
@@ -114,7 +141,7 @@ func parseRedisMetadata(metadata, resolvedEnv, authParams map[string]string) (*r
 func (s *redisScaler) IsActive(ctx context.Context) (bool, error) {
 
 	length, err := getRedisListLength(
-		ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS)
+		ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS, s.metadata.host, s.metadata.port)
 
 	if err != nil {
 		redisLog.Error(err, "error")
@@ -138,7 +165,7 @@ func (s *redisScaler) GetMetricSpecForScaling() []v2beta1.MetricSpec {
 
 // GetMetrics connects to Redis and finds the length of the list
 func (s *redisScaler) GetMetrics(ctx context.Context, metricName string, metricSelector labels.Selector) ([]external_metrics.ExternalMetricValue, error) {
-	listLen, err := getRedisListLength(ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS)
+	listLen, err := getRedisListLength(ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS, s.metadata.host, s.metadata.port)
 
 	if err != nil {
 		redisLog.Error(err, "error getting list length")
@@ -154,9 +181,14 @@ func (s *redisScaler) GetMetrics(ctx context.Context, metricName string, metricS
 	return append([]external_metrics.ExternalMetricValue{}, metric), nil
 }
 
-func getRedisListLength(ctx context.Context, address string, password string, listName string, dbIndex int, enableTLS bool) (int64, error) {
+func getRedisListLength(ctx context.Context, address string, password string, listName string, dbIndex int, enableTLS bool, host string, port string) (int64, error) {
+	fmt.Errorf("Address: %s host:port: %s:%s", address, host, port)
+	redisAddress := address
+	if host != "" && port != "" {
+		redisAddress = fmt.Sprintf("%s:%s", host, port)
+	}
 	options := &redis.Options{
-		Addr:     address,
+		Addr:     redisAddress,
 		Password: password,
 		DB:       dbIndex,
 	}
