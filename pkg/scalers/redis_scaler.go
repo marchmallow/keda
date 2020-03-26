@@ -182,7 +182,6 @@ func (s *redisScaler) GetMetrics(ctx context.Context, metricName string, metricS
 }
 
 func getRedisListLength(ctx context.Context, address string, password string, listName string, dbIndex int, enableTLS bool, host string, port string) (int64, error) {
-	fmt.Errorf("Address: %s host:port: %s:%s", address, host, port)
 	redisAddress := address
 	if host != "" && port != "" {
 		redisAddress = fmt.Sprintf("%s:%s", host, port)
