@@ -105,6 +105,7 @@ func parseRedisMetadata(metadata, resolvedEnv, authParams map[string]string) (*r
 		} else {
 			return nil, fmt.Errorf("no address or port given. Address should be in the format of host:port or you should provide both host and port")
 		}
+		meta.address = fmt.Sprintf("%s:%s", meta.host, meta.port)
 	}
 
 	meta.password = defaultRedisPassword
@@ -141,7 +142,7 @@ func parseRedisMetadata(metadata, resolvedEnv, authParams map[string]string) (*r
 func (s *redisScaler) IsActive(ctx context.Context) (bool, error) {
 
 	length, err := getRedisListLength(
-		ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS, s.metadata.host, s.metadata.port)
+		ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS)
 
 	if err != nil {
 		redisLog.Error(err, "error")
@@ -165,7 +166,7 @@ func (s *redisScaler) GetMetricSpecForScaling() []v2beta1.MetricSpec {
 
 // GetMetrics connects to Redis and finds the length of the list
 func (s *redisScaler) GetMetrics(ctx context.Context, metricName string, metricSelector labels.Selector) ([]external_metrics.ExternalMetricValue, error) {
-	listLen, err := getRedisListLength(ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS, s.metadata.host, s.metadata.port)
+	listLen, err := getRedisListLength(ctx, s.metadata.address, s.metadata.password, s.metadata.listName, s.metadata.databaseIndex, s.metadata.enableTLS)
 
 	if err != nil {
 		redisLog.Error(err, "error getting list length")
@@ -181,13 +182,9 @@ func (s *redisScaler) GetMetrics(ctx context.Context, metricName string, metricS
 	return append([]external_metrics.ExternalMetricValue{}, metric), nil
 }
 
-func getRedisListLength(ctx context.Context, address string, password string, listName string, dbIndex int, enableTLS bool, host string, port string) (int64, error) {
-	redisAddress := address
-	if host != "" && port != "" {
-		redisAddress = fmt.Sprintf("%s:%s", host, port)
-	}
+func getRedisListLength(ctx context.Context, address string, password string, listName string, dbIndex int, enableTLS bool) (int64, error) {
 	options := &redis.Options{
-		Addr:     redisAddress,
+		Addr:     address,
 		Password: password,
 		DB:       dbIndex,
 	}
